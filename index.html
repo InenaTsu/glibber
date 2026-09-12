@@ -9,7 +9,7 @@
      (file://) sucht der Browser das Manifest im selben Ordner oder findet es nicht -
      aufs Spiel hat beides keine Wirkung. Siehe HANDOVER.md, Abschnitt 4. -->
 <link rel="manifest" href="manifest.webmanifest">
-<title>Glibber verschmelzen v19</title>
+<title>Glibber verschmelzen v20</title>
 <style>
 /* Schriften fest eingebettet: Baloo 2 und Nunito, Latin-Ausschnitt, Gewichtsbereich 700-800,
    SIL Open Font License 1.1. Das Spiel braucht damit keinerlei Internetverbindung und sieht
@@ -225,9 +225,56 @@ var MONEY = [
   {n:"Smaragd",    a:"#a0f4bc", b:"#16a85c", sell:2500},
   {n:"Amethyst",   a:"#d8b8ff", b:"#8b3fe0", sell:5900},
   {n:"Saphir",     a:"#b0ccff", b:"#2f4fd6", sell:14000},
-  {n:"Regenbogen", a:"#ffd8f0", b:"#7a6aff", sell:33000}
+  {n:"Regenbogen", a:"#ffd8f0", b:"#7a6aff", sell:33000},
+  /* Ab hier geht es nach Regenbogen weiter - frueher war dort Schluss. */
+  {n:"Opal",       a:"#eafff6", b:"#79c8d8", sell:78000},
+  {n:"Onyx",       a:"#9aa2c0", b:"#232842", sell:184000},
+  {n:"Nova",       a:"#ffd28a", b:"#ff4d00", sell:435000},
+  {n:"Plasma",     a:"#ffa8ff", b:"#9400d3", sell:1030000},
+  {n:"Aurora",     a:"#b8ffd8", b:"#00b0a8", sell:2430000},
+  {n:"Kosmos",     a:"#c4ccff", b:"#1f1fb0", sell:5730000},
+  {n:"Sternenstaub", a:"#fff0c8", b:"#d9a441", sell:13500000}
 ];
-var MAXM = MONEY.length;
+/* Die Kugelgroesse bekommt je Stufe einen kleinen Zuschlag. Der wird ab dieser
+   Stufe nicht mehr groesser - sonst wuechsen die spaeten Glibber ins Uferlose. */
+var TIER_R_CAP = 9;
+/* Danach endet das Spiel nicht, es rechnet weiter: Der Farbton wandert im Kreis,
+   der Preis waechst mit demselben Faktor wie die benannte Kette davor (x2,36).
+   MONEY waechst dabei bei Bedarf nach, alles andere im Code liest MONEY wie bisher. */
+var NAMED_M = MONEY.length;
+var MONEY_STEP = 2.36;
+var EXTRA_NAMES = ["Komet", "Nebel", "Quasar", "Pulsar", "Galaxie", "Zenit", "Titan", "Phönix"];
+function hsl2hex(h, s, l){
+  s /= 100; l /= 100;
+  var k = function(n){ return (n + h / 30) % 12; };
+  var a = s * Math.min(l, 1 - l);
+  var f = function(n){
+    var v = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    var q = Math.round(v * 255).toString(16);
+    return q.length < 2 ? "0" + q : q;
+  };
+  return "#" + f(0) + f(8) + f(4);
+}
+function sig3(v){
+  if(!isFinite(v) || v <= 0) return 1;
+  var e = Math.pow(10, Math.max(0, Math.floor(Math.log(v) / Math.LN10) - 2));
+  return Math.round(v / e) * e;
+}
+function growMoney(t){
+  while(MONEY.length < t && MONEY.length < 400){
+    var i = MONEY.length;                 /* die neue Stufe ist i+1 */
+    var k = i - NAMED_M;                  /* laufende Nummer der gerechneten Stufen */
+    var nm = EXTRA_NAMES[k % EXTRA_NAMES.length];
+    var rd = Math.floor(k / EXTRA_NAMES.length) + 1;
+    var h = (k * 47 + 18) % 360;
+    MONEY.push({
+      n: rd > 1 ? nm + " " + rd : nm,
+      a: hsl2hex(h, 100, 80),
+      b: hsl2hex(h, 70, 44),
+      sell: sig3(MONEY[i - 1].sell * MONEY_STEP)
+    });
+  }
+}
 var ADD_COST = 20;
 var SAVE = "mergethejelly.v5";
 /* Spielstände älterer Fassungen wegräumen, damit nichts Fehlerhaftes hängen bleibt */
@@ -236,7 +283,7 @@ try{
   for(var oi = 0; oi < old.length; oi++) localStorage.removeItem(old[oi]);
 }catch(e){}
 
-function look(g){ return g.t === 0 ? COLORS[g.c] : MONEY[g.t - 1]; }
+function look(g){ if(g.t === 0) return COLORS[g.c]; growMoney(g.t); return MONEY[g.t - 1]; }
 function keyOf(g){ return g.t === 0 ? "c" + g.c : "m" + g.t; }
 function bulkT(t){ return 20; }
 function bulk(g){ return bulkT(g.t); }
@@ -252,10 +299,10 @@ function fresh(){
 var S = fresh();
 /* Geld entsteht ausschliesslich beim Verkaufen. Die Stufe hebt den Verkaufspreis. */
 function incMult(){ return 1 + 0.2 * S.incLv; }
-function sellVal(t){ return Math.round(MONEY[t - 1].sell * incMult()); }
+function sellVal(t){ growMoney(t); return Math.round(MONEY[t - 1].sell * incMult()); }
 function upgCost(){ return Math.round(400 * Math.pow(3.4, S.addTier)); }
 function incCost(){ return Math.round(320 * Math.pow(2.5, S.incLv)); }
-var U = ["", "K", "M", "B", "T"];
+var U = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp"];
 function fmt(n){
   n = Math.floor(n);
   if(n < 1000) return String(n);
@@ -351,7 +398,7 @@ function spec(t){
   var w = box.w > 0 ? box.w : 240;
   var units = Math.max(4, cap / 20);        /* so viele Farb-Jellys passen hinein */
   var R = w * FILL_BASE * Math.pow(5 / units, FILL_EXP) * JELLY_SCALE;
-  R *= (t === 0 ? 1 : MONEY_SCALE * (1 + Math.min(t, MAXM) * 0.006));
+  R *= (t === 0 ? 1 : MONEY_SCALE * (1 + Math.min(t, TIER_R_CAP) * 0.006));
   /* Notbremse: Eine Groesse von 0 oder NaN macht ein ganzes Jelly unsichtbar
      und laesst es durch den Boden fallen - das darf nie passieren. */
   if(!(R > 0.5)) R = 8;
@@ -709,8 +756,11 @@ function unlockColor(c){
 }
 /* Verschmelzen: die Kugeln bleiben liegen und werden zum neuen Jelly umgefärbt */
 function mergeGroups(A, B){
-  var nt = A.t === 0 ? 1 : (A.t < MAXM ? A.t + 1 : 0);
-  if(!nt) return false;
+  /* Nach oben offen: frueher war bei Regenbogen Schluss und ein Paar Regenbogen
+     blieb liegen. Jetzt waechst die Stufenliste bei Bedarf nach. */
+  var nt = A.t === 0 ? 1 : A.t + 1;
+  growMoney(nt);
+  if(nt > MONEY.length) return false;
   if(A === B || !A.parts.length || !B.parts.length) return false;
   var sp = spec(nt);
   centroid(A); centroid(B);
@@ -777,13 +827,13 @@ function hasSellable(){
   for(var i = 0; i < groups.length; i++) if(groups[i].parts.length && groups[i].t > 0) return true;
   return false;
 }
-/* Nur Paare zählen, die auch wirklich verschmelzen können: mit Kugeln im Feld
-   und unterhalb der letzten Stufe. Ein Paar Regenbogen-Jellys ist keine Rettung. */
+/* Nur Paare zählen, die auch wirklich verschmelzen können, also Kugeln im Feld
+   haben. Eine letzte Stufe gibt es nicht mehr - die Kette ist nach oben offen. */
 function hasPair(){
   var seen = {};
   for(var i = 0; i < groups.length; i++){
     var g = groups[i];
-    if(!g.parts.length || g.t >= MAXM) continue;
+    if(!g.parts.length) continue;
     var k = keyOf(g);
     if(seen[k]) return true;
     seen[k] = 1;
@@ -860,7 +910,7 @@ function expand(){
   save();
 }
 function upgradeAdd(){
-  if(S.addTier >= MAXM - 2 || S.best < S.addTier + 2) return;
+  if(S.addTier >= MONEY.length - 2 || S.best < S.addTier + 2) return;
   var c = upgCost();
   if(S.money < c) return;
   S.money -= c;
@@ -1041,8 +1091,16 @@ window.addEventListener("blur", drop);
 
 /* ===================== Knöpfe ===================== */
 function $(id){ return document.getElementById(id); }
-var holdTimer = null, holdCount = 0;
+/* Gedrückt halten wirft weiter Glibber ein. Der Takt darf aber NUR laufen,
+   solange der Finger wirklich auf dem Knopf liegt (Fehler 12, Abschnitt 8):
+   Auf dem Handy kommt statt "pointerup" oft "pointercancel", wenn der Browser
+   den Finger für eine Wischgeste beansprucht - dann blieb der Takt stehen und
+   der Behälter füllte sich von allein, ohne dass jemand drückte. Deshalb
+   beenden ihn jetzt alle denkbaren Meldungen, und holdDown ist die Bremse:
+   Ohne anliegenden Finger wirft doAdd() nichts mehr ein. */
+var holdTimer = null, holdCount = 0, holdDown = false;
 function doAdd(){
+  if(!holdDown){ stopAdd(); return; }
   var m = 1 + Math.min(4, Math.floor(holdCount / 4));
   if(addJelly(m)){
     holdCount++;
@@ -1053,13 +1111,26 @@ function doAdd(){
 function stopAdd(){
   if(holdTimer){ clearInterval(holdTimer); holdTimer = null; }
   holdCount = 0;
+  holdDown = false;
   $("mult").hidden = true;
 }
 $("btn-add").addEventListener("pointerdown", function(e){
-  holdCount = 0; doAdd();
+  stopAdd();                    /* nie zwei Takte gleichzeitig (zweiter Finger) */
+  holdDown = true; holdCount = 0;
+  /* Den Zeiger festhalten: dann meldet der Browser das Ende zuverlässig hier,
+     auch wenn der Finger vom Knopf rutscht. */
+  try{ if(e && e.pointerId !== undefined && this.setPointerCapture) this.setPointerCapture(e.pointerId); }catch(err){}
+  doAdd();
   holdTimer = setInterval(doAdd, 260);
 });
-window.addEventListener("pointerup", stopAdd);
+var endAdd = ["pointerup", "pointercancel", "lostpointercapture", "touchend", "touchcancel", "blur"];
+for(var ei = 0; ei < endAdd.length; ei++){
+  $("btn-add").addEventListener(endAdd[ei], stopAdd);
+  window.addEventListener(endAdd[ei], stopAdd);
+}
+if(typeof document !== "undefined" && document.addEventListener){
+  document.addEventListener("visibilitychange", function(){ if(document.hidden) stopAdd(); });
+}
 $("btn-exp").addEventListener("click", expand);
 $("btn-jellies").addEventListener("click", openChain);
 $("btn-restart").addEventListener("click", resetGame);
@@ -1105,7 +1176,14 @@ function openChain(){
   h += '<div class="colorrow">';
   for(var c = 0; c < COLORS.length; c++) h += '<canvas class="' + (c < colorCount() ? "" : "off") + '" data-c="' + c + '" width="80" height="80"></canvas>';
   h += "</div><div class='chain'>";
-  /* Von der ersten Stufe nach unten zu den späteren - so, wie sie freigeschaltet werden. */
+  /* Von der ersten Stufe nach unten zu den späteren - so, wie sie freigeschaltet werden.
+     Die Kette ist nach oben offen, deshalb zeigt die Liste die erreichten Stufen und
+     zwei weitere als "???". So bleibt immer etwas übrig, das noch kommt. */
+  var top = 9;
+  for(var si = 0; si < S.seenM.length; si++) if(S.seenM[si] + 2 > top) top = S.seenM[si] + 2;
+  for(var gi = 0; gi < groups.length; gi++) if(groups[gi].t + 2 > top) top = groups[gi].t + 2;
+  growMoney(top);
+  var MAXM = Math.min(top, MONEY.length);
   for(var t = 1; t <= MAXM; t++){
     var known = S.seenM.indexOf(t) !== -1;
     h += '<div class="ch' + (known ? "" : " off") + '">' +
@@ -1114,7 +1192,7 @@ function openChain(){
       '<span class="st"><span>Verkauf $' + fmt(sellVal(t)) + "</span></span></span></div>";
     if(t < MAXM) h += '<div class="link"></div>';
   }
-  h += '</div><div class="hint">Version 19' + (S.heals ? " &middot; Selbstheilung: " + S.heals : "") + '</div>';
+  h += '</div><div class="hint">Version 20' + (S.heals ? " &middot; Selbstheilung: " + S.heals : "") + '</div>';
   h += '<button class="reset" id="rs">Neu anfangen</button>';
   var o = openOv(h);
   var ms = o.querySelectorAll("canvas[data-m]");
@@ -1239,7 +1317,9 @@ window.addEventListener("resize", resize);
 var list = (had && Array.isArray(S.jellies) && S.jellies.length) ? S.jellies : [{t:0, c:0}, {t:0, c:1}];
 for(var i = 0; i < list.length && i < 200; i++){
   var sp0 = list[i];
-  makeGroup(Math.max(0, Math.min(MAXM, sp0.t | 0)),
+  var t0 = Math.max(0, Math.min(400, sp0.t | 0));
+  growMoney(t0);
+  makeGroup(t0,
             Math.max(0, Math.min(COLORS.length - 1, sp0.c | 0)),
             box.x + box.w * (.2 + Math.random() * .6),
             box.y + 60 + Math.random() * 80);
